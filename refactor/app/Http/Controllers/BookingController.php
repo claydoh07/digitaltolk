@@ -33,19 +33,21 @@ class BookingController extends Controller
      * @param Request $request
      * @return mixed
      */
+
     public function index(Request $request)
     {
-        if($user_id = $request->get('user_id')) {
-
-            $response = $this->repository->getUsersJobs($user_id);
-
-        }
-        elseif($request->__authenticatedUser->user_type == env('ADMIN_ROLE_ID') || $request->__authenticatedUser->user_type == env('SUPERADMIN_ROLE_ID'))
-        {
+        $admin_roles = [config('app.superadmin_role_id'), config('app.admin_role_id')];
+        // Can use /Auth::user() facade
+        $cuser = $request->__authenticatedUser;
+        
+        if(in_array($cuser->user_type, $admin_roles)) {
             $response = $this->repository->getAll($request);
+            // Early returns, should use Resource for data formatting, and no status code???
+            return response($response);       
         }
-
-        return response($response);
+        // I don't know the default but since the condition is wrong, i assumed this is the default response.
+        $response = $this->repository->getUsersJobs($cuser);
+        return response($response);       
     }
 
     /**
@@ -54,8 +56,8 @@ class BookingController extends Controller
      */
     public function show($id)
     {
-        $job = $this->repository->with('translatorJobRel.user')->find($id);
-
+        // I'll implement find or fail for catching
+        $job = $this->repository->with('translatorJobRel.user')->findOrFail($id);
         return response($job);
     }
 
@@ -63,11 +65,14 @@ class BookingController extends Controller
      * @param Request $request
      * @return mixed
      */
-    public function store(Request $request)
+    public function store(StoreJobRequest $request) // Use IsUserCustomer Middleware
     {
-        $data = $request->all();
-
-        $response = $this->repository->store($request->__authenticatedUser, $data);
+        // Add Store Job Request to filter request
+        // Get validated request instead of all data
+        $data = $request->validated();
+        // Declare cuser
+        $cuser = $request->__authenticatedUser;
+        $response = $this->repository->store($cuser, $data);
 
         return response($response);
 
@@ -78,9 +83,9 @@ class BookingController extends Controller
      * @param Request $request
      * @return mixed
      */
-    public function update($id, Request $request)
+    public function update($id, UpdateJobRequest $request)
     {
-        $data = $request->all();
+        $data = $request->validated();
         $cuser = $request->__authenticatedUser;
         $response = $this->repository->updateJob($id, array_except($data, ['_token', 'submit']), $cuser);
 
@@ -93,9 +98,9 @@ class BookingController extends Controller
      */
     public function immediateJobEmail(Request $request)
     {
-        $adminSenderEmail = config('app.adminemail');
+        $adminSenderEmail = config('app.adminemail'); // not used
         $data = $request->all();
-
+        // isn't this supposed to be in the store api?
         $response = $this->repository->storeJobEmail($data);
 
         return response($response);
@@ -107,6 +112,7 @@ class BookingController extends Controller
      */
     public function getHistory(Request $request)
     {
+        // should be in Index API
         if($user_id = $request->get('user_id')) {
 
             $response = $this->repository->getUsersJobsHistory($user_id, $request);
@@ -194,6 +200,7 @@ class BookingController extends Controller
 
     public function distanceFeed(Request $request)
     {
+        // logic in the controller, should be in the repository
         $data = $request->all();
 
         if (isset($data['distance']) && $data['distance'] != "") {
